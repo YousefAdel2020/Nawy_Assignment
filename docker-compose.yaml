@@ -1,0 +1,69 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_nawy
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: nawy123
+      POSTGRES_DB: nawy_db
+    ports:
+      - "15433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nawy-network
+
+  backend:
+    build:
+      context: ./nawy-backend
+      dockerfile: Dockerfile
+    container_name: nawy_backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:nawy123@postgres:5432/nawy_db
+      - APP_PREFIX=api
+      - DEFAULT_PAGE=1
+      - DEFAULT_PAGE_SIZE=5
+      - MAX_FILE_SIZE=5242880
+      - MAX_FILES_PER_ENTITY=10
+      - UPLOAD_PATH=./uploads
+    ports:
+      - "3001:3000"
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      - postgres
+    networks:
+      - nawy-network
+
+  frontend:
+    build:
+      context: ./nawy-frontend
+      dockerfile: Dockerfile
+    container_name: nawy_frontend
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://localhost:3001/api/v1
+      - STATIC_URL=http://localhost:3001
+      - DEFAULT_PAGE=1
+      - DEFAULT_TAKE=10
+      - MAX_TAKE=50
+      - DEBOUNCE_DELAY=300
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - nawy-network
+
+volumes:
+  postgres_data:
+  backend_uploads:
+
+
+networks:
+  nawy-network:
+    driver: bridge
