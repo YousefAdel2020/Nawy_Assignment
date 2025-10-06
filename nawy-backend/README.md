@@ -1,6 +1,6 @@
-# Apartment Management API - Refactored
+# Nawy Backend API
 
-A clean, modular NestJS API for managing apartments with separated upload functionality, built with Prisma ORM and PostgreSQL database.
+A clean, modular NestJS API for managing apartments with integrated file upload functionality, built with Prisma ORM and PostgreSQL database.
 
 ## 🏗️ Architecture Overview
 
@@ -10,33 +10,36 @@ The application follows a clean, modular architecture with clear separation of c
 src/
 ├── apartments/           # Apartment management module
 │   ├── dto/             # Data Transfer Objects
+│   │   ├── request/     # Request DTOs
+│   │   └── response/    # Response DTOs
 │   ├── apartments.controller.ts
 │   ├── apartments.service.ts
 │   └── apartments.module.ts
-├── upload/              # File upload module (separated)
-│   ├── upload.controller.ts
-│   ├── upload.service.ts
-│   └── upload.module.ts
 ├── prisma/              # Database module (global)
 │   ├── prisma.service.ts
 │   └── prisma.module.ts
 ├── config/              # Configuration management
 │   └── configuration.ts
+├── common/              # Shared utilities
+│   └── dto/             # Common DTOs (pagination, etc.)
+├── pipe/                # Custom validation pipes
+│   └── upload-validation/
 ├── app.module.ts        # Main application module
 └── main.ts             # Application bootstrap
 ```
 
-## ✨ Key Improvements
+## ✨ Key Features
 
-### 1. **Separated Upload Logic**
-- **Dedicated Upload Module**: File upload functionality is now in its own module
-- **Reusable Service**: Upload service can be used by any entity type
-- **Clean Separation**: Apartment module focuses only on apartment business logic
+### 1. **Integrated File Upload**
+- **Built-in Upload Support**: File upload functionality integrated directly into apartment creation
+- **Image Validation**: Custom validation pipe for file type and size validation
+- **Multiple Images**: Support for up to 5 images per apartment
+- **Secure Storage**: Files stored with UUID-based naming
 
 ### 2. **PostgreSQL Integration**
-- **Production Ready**: Switched from SQLite to PostgreSQL
+- **Production Ready**: Built with PostgreSQL for production environments
 - **Scalable**: Better performance and concurrent access
-- **Production Database**: Suitable for production environments
+- **Prisma ORM**: Type-safe database operations with Prisma
 
 ### 3. **Clean Code Structure**
 - **Single Responsibility**: Each module has a clear, single purpose
@@ -44,10 +47,11 @@ src/
 - **Configuration Management**: Centralized configuration with environment variables
 - **Type Safety**: Full TypeScript implementation with proper interfaces
 
-### 4. **Improved Error Handling**
-- **Consistent Error Responses**: Standardized error handling across modules
-- **Proper HTTP Status Codes**: Appropriate status codes for different scenarios
-- **Validation**: Comprehensive input validation with detailed error messages
+### 4. **Comprehensive API**
+- **RESTful Endpoints**: Clean REST API design
+- **Swagger Documentation**: Auto-generated API documentation
+- **Input Validation**: Comprehensive validation using class-validator
+- **Error Handling**: Consistent error responses with proper HTTP status codes
 
 ## 🚀 Quick Start
 
@@ -87,17 +91,15 @@ src/
 ## 📚 API Endpoints
 
 ### Apartment Management
-- `POST /api/apartments` - Create apartment
-- `GET /api/apartments` - List apartments (with search & filter)
-- `GET /api/apartments/:id` - Get apartment details
-- `PATCH /api/apartments/:id` - Update apartment
-- `DELETE /api/apartments/:id` - Delete apartment
+- `POST /api/v1/apartments` - Create apartment (with optional image upload)
+- `GET /api/v1/apartments` - List apartments (with search & filter)
+- `GET /api/v1/apartments/:id` - Get apartment details
 
-### File Upload (Separate Module)
-- `POST /api/upload/apartments/:id/images` - Upload apartment images
-- `GET /api/upload/images/:filename` - Serve images
-- `DELETE /api/upload/images/:fileId` - Delete single image
-- `DELETE /api/upload/apartments/:id/images` - Delete all apartment images
+### API Documentation
+- `GET /api/v1/docs` - Swagger API documentation
+
+### Static File Serving
+- `GET /uploads/:filename` - Serve uploaded images
 
 ## 🔧 Configuration
 
@@ -106,20 +108,20 @@ The application uses a centralized configuration system:
 ```typescript
 // src/config/configuration.ts
 export default () => ({
-  port: parseInt(process.env.PORT, 10) || 3000,
+  port: Number(process.env.PORT) || 3000,
+  app_prefix: process.env.APP_PREFIX || 'api',
   database: {
     url: process.env.DATABASE_URL,
   },
-  upload: {
-    maxFileSize: 5 * 1024 * 1024, // 5MB
-    maxFilesPerEntity: 10,
-    uploadPath: './uploads',
-    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  pagination: {
+    defaultPage: Number(process.env.DEFAULT_PAGE) || 1,
+    defaultPageSize: Number(process.env.DEFAULT_PAGE_SIZE) || 10,
   },
-  cors: {
-    origin: '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
+  upload: {
+    maxFileSize: Number(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024, // 5MB
+    maxFilesPerEntity: Number(process.env.MAX_FILES_PER_ENTITY) || 10,
+    uploadPath: process.env.UPLOAD_PATH || './uploads',
+    allowedMimeTypes: ['image/jpeg', 'image/png'],
   },
 });
 ```
@@ -130,21 +132,27 @@ export default () => ({
 - **Purpose**: Manages apartment CRUD operations and business logic
 - **Dependencies**: PrismaService (injected globally)
 - **Exports**: ApartmentsService
-
-### Upload Module
-- **Purpose**: Handles file uploads for any entity type
-- **Dependencies**: PrismaService, ConfigService (injected globally)
-- **Exports**: UploadService
-- **Features**: 
-  - Generic file upload for any entity
-  - File validation and size limits
-  - Automatic cleanup on errors
-  - Configurable upload settings
+- **Features**:
+  - Create apartments with optional image uploads
+  - List apartments with advanced filtering and pagination
+  - Get individual apartment details
+  - Integrated file upload handling
 
 ### Prisma Module (Global)
 - **Purpose**: Database connection and ORM management
 - **Scope**: Global module available throughout the application
 - **Exports**: PrismaService
+- **Features**:
+  - PostgreSQL connection management
+  - Type-safe database operations
+  - Connection pooling and optimization
+
+### Upload Validation Pipe
+- **Purpose**: Validates uploaded files for apartments
+- **Features**:
+  - File type validation (JPEG, PNG only)
+  - File size limits (configurable)
+  - Multiple file support (up to 5 images)
 
 ## 🔍 Search & Filter Features
 
@@ -152,9 +160,9 @@ The apartment listing supports comprehensive search and filtering:
 
 ```typescript
 // Example API calls
-GET /api/apartments?search=luxury&project=Downtown&minPrice=2000000&bedrooms=2
-GET /api/apartments?unitName=penthouse&isAvailable=true&sortBy=price&sortOrder=asc
-GET /api/apartments?maxArea=150&bathrooms=2&page=2&limit=5
+GET /api/v1/apartments?search=luxury&project=Downtown&minPrice=2000000&bedrooms=2
+GET /api/v1/apartments?unitName=penthouse&isAvailable=true&sortBy=price&sortOrder=asc
+GET /api/v1/apartments?maxArea=150&bathrooms=2&page=2&limit=5
 ```
 
 **Available Filters:**
@@ -167,23 +175,21 @@ GET /api/apartments?maxArea=150&bathrooms=2&page=2&limit=5
 ## 📁 File Upload System
 
 ### Features
-- **Multiple File Support**: Upload up to 10 images per apartment
-- **File Validation**: Type and size validation
+- **Multiple File Support**: Upload up to 5 images per apartment
+- **File Validation**: Type and size validation with custom pipe
 - **Secure Storage**: UUID-based filenames prevent conflicts
-- **Automatic Cleanup**: Files deleted when apartment is removed
+- **Integrated Upload**: File upload integrated into apartment creation endpoint
 - **Configurable Limits**: Adjustable file size and count limits
 
 ### Supported Formats
 - JPEG (.jpg, .jpeg)
 - PNG (.png)
-- GIF (.gif)
-- WebP (.webp)
 
 ### File Management
 - Files stored in `./uploads/` directory
 - Automatic directory creation
 - Database tracking of file metadata
-- Cleanup on entity deletion
+- Static file serving through NestJS
 
 ## 🛡️ Security Features
 
@@ -200,11 +206,10 @@ GET /api/apartments?maxArea=150&bathrooms=2&page=2&limit=5
 # Run unit tests
 npm run test
 
-# Run e2e tests
-npm run test:e2e
 
-# Run tests with coverage
-npm run test:cov
+
+# Run tests in watch mode
+npm run test:watch
 ```
 
 ## 📦 Environment Variables
@@ -218,16 +223,16 @@ DATABASE_URL="postgresql://username:password@localhost:5432/nawy_db?schema=publi
 # Server
 PORT=3000
 NODE_ENV=development
+APP_PREFIX=api
+
+# Pagination
+DEFAULT_PAGE=1
+DEFAULT_PAGE_SIZE=10
 
 # Upload Configuration
 MAX_FILE_SIZE=5242880
 MAX_FILES_PER_ENTITY=10
 UPLOAD_PATH=./uploads
-
-# CORS Configuration
-CORS_ORIGIN=*
-CORS_METHODS=GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS
-CORS_CREDENTIALS=true
 ```
 
 ## 🚀 Production Deployment
@@ -248,12 +253,12 @@ CORS_CREDENTIALS=true
    npm run start:prod
    ```
 
-## 🔄 Migration from SQLite
+## 🔄 Database Schema
 
-The codebase has been refactored to use PostgreSQL:
+The application uses PostgreSQL with Prisma ORM:
 
-1. **Database Schema**: Updated Prisma schema for PostgreSQL
-2. **Connection String**: Changed from SQLite to PostgreSQL format
+1. **Database Schema**: Defined in `prisma/schema.prisma`
+2. **Migrations**: Database migrations managed by Prisma
 3. **Data Types**: Optimized for PostgreSQL data types
 4. **Performance**: Better concurrent access and scalability
 
@@ -279,4 +284,4 @@ This project is licensed under the MIT License.
 
 ---
 
-**Note**: This refactored version provides a clean, maintainable, and scalable foundation for apartment management with separated concerns and PostgreSQL integration.
+**Note**: This API provides a clean, maintainable, and scalable foundation for apartment management with integrated file upload functionality and PostgreSQL integration.
